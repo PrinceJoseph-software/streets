@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   STREETS DESIGN TOKENS
+   Tailwind v4 — all tokens live here via @theme, not in tailwind.config.ts
+   ============================================================================= */
+
+@theme {
+  /* --- Palette ----------------------------------------------------------------
+     ink  = near-black (softer than #000, more print-like)
+     bone = warm off-white "paper" — default page background
+     streets-yellow = scarce highlighter, ONE key element per screen MAX
+     rising / falling = rank movement only, never decorative
+     mute = metadata, secondary labels
+  ---------------------------------------------------------------------------- */
+  --color-ink: #0a0a0a;
+  --color-bone: #f4f1ea;
+  --color-streets-yellow: #ffe000;
+  --color-rising: #1fae6b;
+  --color-falling: #d7263d;
+  --color-mute: #8a857a;
+
+  /* --- Typography -------------------------------------------------------------
+     display  → Anton (condensed grotesque, fight-poster headlines)
+     body     → Inter (clean grotesque)
+     mono     → JetBrains Mono (ALL numbers: ranks, counts, stats)
+     CSS vars injected by next/font in layout.tsx
+  ---------------------------------------------------------------------------- */
+  --font-display: var(--font-anton);
+  --font-body: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+
+  /* --- Spacing ----------------------------------------------------------------
+     4px base scale. Generous whitespace = editorial credibility.
+  ---------------------------------------------------------------------------- */
+  --spacing: 4px;
+}
+
+/* =============================================================================
+   BASE STYLES
+   ============================================================================= */
+
+html {
+  /* Bone background, ink text — mobile-first default, no dark-mode inversion */
+  background-color: #f4f1ea;
+  color: #0a0a0a;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100dvh;
+  background-color: #f4f1ea;
+  color: #0a0a0a;
+}
+
+/* =============================================================================
+   YELLOW HIGHLIGHTER UTILITY
+   ─────────────────────────────────────────────────────────────────────────────
+   USE: one element per screen, maximum — the single "hottest" signal.
+   RULE: Yellow is a FILL behind dark (ink) text. NEVER yellow text on bone —
+         that combination fails WCAG AA contrast. Yellow fills pass AA.
+   CORRECT:   <span class="highlight-yellow">…</span>   (ink text, yellow bg)
+   INCORRECT: class="text-streets-yellow bg-bone"        (fails contrast)
+   ============================================================================= */
+.highlight-yellow {
+  background-color: #ffe000;
+  color: #0a0a0a; /* ink on yellow — passes AA */
+  display: inline-block;
+}
+
+/* =============================================================================
+   RANK MOVEMENT — the only permitted animations
+   ─────────────────────────────────────────────────────────────────────────────
+   Motion should always mean a rank changed. Nothing else animates.
+   Respect prefers-reduced-motion at all times.
+   ============================================================================= */
+@media (prefers-reduced-motion: no-preference) {
+  .rank-up {
+    animation: rank-slide-up 250ms ease-out both;
+    color: #1fae6b; /* rising */
+  }
+
+  .rank-down {
+    animation: rank-slide-down 250ms ease-out both;
+    color: #d7263d; /* falling */
+  }
+
+  @keyframes rank-slide-up {
+    from { transform: translateY(4px); opacity: 0.6; }
+    to   { transform: translateY(0);   opacity: 1; }
+  }
+
+  @keyframes rank-slide-down {
+    from { transform: translateY(-4px); opacity: 0.6; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+}
+
+/* =============================================================================
+   FORM PRIMITIVES — editorial, tale-of-the-tape style
+   No rounded boxes. Bottom-border only. Reads like a press scorecard.
+   ============================================================================= */
+
+/* Base input/textarea/select: bottom border, no box, 16px min (avoids iOS zoom) */
+.form-input {
+  background:   transparent;
+  color:        #0a0a0a;
+  border:       none;
+  border-bottom: 2px solid #0a0a0a;
+  border-radius: 0;
+  padding:      10px 0;
+  font-family:  var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size:    16px;      /* min 16px — prevents iOS Safari auto-zoom */
+  line-height:  1.4;
+  width:        100%;
+  outline:      none;
+  transition:   border-color 150ms ease-out;
+  -webkit-appearance: none;
+  appearance:   none;
+}
+
+.form-input::placeholder {
+  color: #8a857a;
+}
+
+.form-input:focus {
+  border-bottom-color: #0a0a0a;
+}
+
+/* Select-specific: show a minimal arrow */
+.form-select {
+  padding-right: 24px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%230a0a0a' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  cursor: pointer;
+}
