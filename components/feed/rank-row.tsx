@@ -9,6 +9,7 @@ import { useReactions } from './reaction-provider'
 export interface RankRowTrack {
   rank: number
   momentum: number
+  pulse: number
   tracks: {
     id: string
     title: string
@@ -50,12 +51,15 @@ function getEmbedUrl(extUrl: string, platform: string): string | null {
 }
 
 // ─── movement indicator ───────────────────────────────────────────────────────
+// pulse < 0.5 means essentially no recent engagement — show neutral — regardless
+// of momentum ratio (which would be 0/3 ≈ 0 and falsely read as "falling").
+// ▼ only fires when there was real prior heat (pulse ≥ 0.5) that has since cooled.
 
-function MovementBadge({ momentum }: { momentum: number }) {
+function MovementBadge({ momentum, pulse }: { momentum: number; pulse: number }) {
   if (momentum >= 1.5) {
     return <span className="rank-up text-rising font-mono text-xs">▲</span>
   }
-  if (momentum < 0.3) {
+  if (momentum < 0.3 && pulse >= 0.5) {
     return <span className="rank-down text-falling font-mono text-xs">▼</span>
   }
   return <span className="font-mono text-xs text-mute">—</span>
@@ -92,7 +96,7 @@ interface Props {
 
 export function RankRow({ item, showCity = false }: Props) {
   const [playing, setPlaying] = useState(false)
-  const { rank, momentum, tracks } = item
+  const { rank, momentum, pulse, tracks } = item
   const t = tracks
   const embedUrl = getEmbedUrl(t.ext_url, t.ext_platform)
 
@@ -142,7 +146,7 @@ export function RankRow({ item, showCity = false }: Props) {
         {/* Track info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5">
-            <MovementBadge momentum={momentum} />
+            <MovementBadge momentum={momentum} pulse={pulse} />
             {t.artists.ignited_at && (
               <span className="highlight-yellow font-mono text-xs px-1 leading-tight">
                 IGNITED

@@ -185,6 +185,14 @@ SET search_path = public
 AS $$
 DECLARE
   v_now TIMESTAMPTZ := NOW();
+
+  -- ── Ignition thresholds (named constants) ─────────────────────────────────
+  -- An artist ignites when they hit the Top 10 Nigeria AND cross BOTH bars.
+  -- With only 3 seed users the weight cap is 3×(3×1.5)=13.5 — well below 40,
+  -- so the seed dataset can never trigger ignition accidentally.
+  IGNITION_MIN_TRUSTED_WEIGHT   CONSTANT NUMERIC := 40;
+  IGNITION_MIN_DISTINCT_BACKERS CONSTANT INT     := 20;
+
 BEGIN
 
   -- ── Step 1: Compute scores for all tracks in one CTE pass ─────────────────
@@ -347,12 +355,16 @@ BEGIN
     AND r.track_id = rk.track_id;
 
   -- ── Step 4: IGNITION ───────────────────────────────────────────────────────
-  -- Condition: artist has a track in Top 10 of 'nigeria' bucket
-  --            AND total trust-weighted vote score >= 5 (prevents instant ignition
-  --            on a seed-only dataset where all artists are in the trivial top 10)
+  -- ALL THREE conditions must hold simultaneously:
+  --   1. Artist has a track in the Top 10 of the 'nigeria' bucket.
+  --   2. Cumulative trust-weighted vote score >= IGNITION_MIN_TRUSTED_WEIGHT (40).
+  --      Prevents artists with a handful of high-trust voters from igniting.
+  --   3. Distinct backers (unique voters) >= IGNITION_MIN_DISTINCT_BACKERS (20).
+  --      Ensures breadth of community buy-in, not just a single power-user.
   UPDATE artists a
   SET ignited_at = v_now
   WHERE a.ignited_at IS NULL
+    -- Condition 1: in the national Top 10
     AND EXISTS (
       SELECT 1
       FROM rankings r
@@ -361,14 +373,22 @@ BEGIN
         AND r.bucket = 'nigeria'
         AND r.rank   <= 10
     )
+    -- Condition 2: enough trust-weighted vote mass
     AND (
-      -- Minimum engagement threshold to ignite
       SELECT COALESCE(SUM(ee.weight), 0)
       FROM engagement_events ee
       JOIN tracks t ON t.id = ee.track_id
       WHERE t.artist_id = a.id
         AND ee.kind = 'vote'
-    ) >= 5.0;
+    ) >= IGNITION_MIN_TRUSTED_WEIGHT
+    -- Condition 3: enough distinct backers
+    AND (
+      SELECT COUNT(DISTINCT ee.user_id)
+      FROM engagement_events ee
+      JOIN tracks t ON t.id = ee.track_id
+      WHERE t.artist_id = a.id
+        AND ee.kind = 'vote'
+    ) >= IGNITION_MIN_DISTINCT_BACKERS;
 
   -- ── Step 5: SUPPORTER LEDGER — write for artists that just ignited ─────────
   -- Finds every user who cast a vote on the artist BEFORE ignited_at,

@@ -1,6 +1,8 @@
+import { Suspense }           from 'react'
 import { createPublicClient } from '@/lib/supabase/public'
-import { FeedClient } from '@/components/feed/feed-client'
-import type { RankRowTrack } from '@/components/feed/rank-row'
+import { FeedClient }         from '@/components/feed/feed-client'
+import { HomeMasthead }       from '@/components/home-masthead'
+import type { RankRowTrack }  from '@/components/feed/rank-row'
 
 const TRACK_FIELDS = `
   rank,
@@ -90,6 +92,11 @@ export default async function Home() {
           + Submit
         </a>
       </div>
+
+      {/* ── Tagline — first-visit only, dismissed via localStorage ───────── */}
+      <Suspense>
+        <HomeMasthead />
+      </Suspense>
 
       {/* ── Feed ───────────────────────────────────────────────────────────── */}
       <div className="max-w-md mx-auto">

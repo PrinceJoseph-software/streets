@@ -27,6 +27,8 @@ export interface ArtistHeroProps {
     momentum: number
   } | null
   nextSupporterNumber: number
+  onVoteSuccess?: () => void
+  onAlreadyVoted?: () => void
 }
 
 // ─── embed URL helper ──────────────────────────────────────────────────────────
@@ -82,6 +84,8 @@ export function ArtistHero({
   topTrack,
   ranking,
   nextSupporterNumber,
+  onVoteSuccess,
+  onAlreadyVoted,
 }: ArtistHeroProps) {
   const [playing, setPlaying] = useState(false)
 
@@ -201,6 +205,8 @@ export function ArtistHero({
             trackId={topTrack.id}
             artistName={artist.name}
             nextSupporterNumber={nextSupporterNumber}
+            onVoteSuccess={onVoteSuccess}
+            onAlreadyVoted={onAlreadyVoted}
           />
           <ShareButton artistName={artist.name} slug={artist.slug} />
         </div>

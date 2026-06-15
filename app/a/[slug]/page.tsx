@@ -2,9 +2,7 @@ import type { Metadata } from 'next'
 import { Suspense }      from 'react'
 import { notFound }      from 'next/navigation'
 import { createPublicClient }       from '@/lib/supabase/public'
-import { ArtistHero }               from '@/components/artist/artist-hero'
-import { RankSparkline }            from '@/components/artist/rank-sparkline'
-import { SupporterLedgerPreview }   from '@/components/artist/supporter-ledger-preview'
+import { ArtistVoteIsland }         from '@/components/artist/artist-vote-island'
 import { ShareCardTracker }         from '@/components/artist/share-card-tracker'
 import type { SupporterRow }        from '@/components/artist/supporter-ledger-preview'
 
@@ -204,7 +202,6 @@ export default async function ArtistPage({
 
   const supporters = (rawSupporters ?? []) as unknown as SupporterRow[]
   const cityName   = artist.cities?.name ?? ''
-  const nextNum    = (voteCount ?? 0) + 1
 
   return (
     <main className="min-h-dvh bg-bone pb-24">
@@ -229,9 +226,9 @@ export default async function ArtistPage({
         </a>
       </div>
 
-      {/* ── Above the fold ──────────────────────────────────────────────── */}
+      {/* ── Vote island: hero + sparkline + live backers/sealed ledger ─── */}
       <div className="max-w-md mx-auto px-5">
-        <ArtistHero
+        <ArtistVoteIsland
           artist={{
             id:        artist.id,
             name:      artist.name,
@@ -252,29 +249,10 @@ export default async function ArtistPage({
               : null
           }
           ranking={ranking}
-          nextSupporterNumber={nextNum}
-        />
-      </div>
-
-      {/* ── Below the fold ──────────────────────────────────────────────── */}
-      <div className="max-w-md mx-auto px-5">
-        <div className="w-full h-px bg-ink opacity-20 mb-8" />
-
-        {/* Rank history sparkline */}
-        <RankSparkline
-          currentRank={ranking?.rank ?? null}
-          history={ranking ? [ranking.rank] : []}
-        />
-
-        <div className="w-full h-px bg-ink opacity-20 mb-8" />
-
-        {/* Early supporter ledger */}
-        <SupporterLedgerPreview
           isIgnited={!!artist.ignited_at}
+          initialBackerCount={voteCount ?? 0}
           supporterCount={supporterCount ?? 0}
-          voteCount={voteCount ?? 0}
           supporters={supporters}
-          nextSupporterNumber={nextNum}
         />
       </div>
     </main>

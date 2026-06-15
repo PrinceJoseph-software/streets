@@ -10,11 +10,15 @@ interface Props {
   trackId: string
   artistName: string
   nextSupporterNumber: number
+  /** Called when the user casts a NEW vote this session. */
+  onVoteSuccess?: () => void
+  /** Called on mount when we detect the user already voted in a prior session. */
+  onAlreadyVoted?: () => void
 }
 
 type VoteState = 'idle' | 'voting' | 'voted' | 'show-upgrade'
 
-export function VoteButton({ trackId, artistName, nextSupporterNumber }: Props) {
+export function VoteButton({ trackId, artistName, nextSupporterNumber, onVoteSuccess, onAlreadyVoted }: Props) {
   const posthog                     = usePostHog()
   const { user, isAnonymous, isLoading: authLoading } = useAuth()
   const [voteState, setVoteState]   = useState<VoteState>('idle')
@@ -37,7 +41,10 @@ export function VoteButton({ trackId, artistName, nextSupporterNumber }: Props) 
       .eq('kind', 'vote')
       .maybeSingle()
       .then(({ data }: { data: unknown }) => {
-        if (data) setVoteState('voted')
+        if (data) {
+          setVoteState('voted')
+          onAlreadyVoted?.()
+        }
         setChecking(false)
       })
   }, [user, isAnonymous, authLoading, trackId])
@@ -63,6 +70,7 @@ export function VoteButton({ trackId, artistName, nextSupporterNumber }: Props) 
     if (!rpcError) {
       setVoteState('voted')
       posthog?.capture('vote', { track_id: trackId, artist_name: artistName })
+      onVoteSuccess?.()
       return
     }
 

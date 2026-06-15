@@ -1,29 +1,31 @@
 -- =============================================================================
--- STREETS — Phase 1: Dev Seed
--- Idempotent (ON CONFLICT DO NOTHING everywhere).
+-- STREETS — Dev Seed  (idempotent — safe to re-run)
 -- Run in Supabase SQL Editor AFTER all migrations.
 --
 -- Creates:
---   • 3 seed users in auth.users (triggers handle_new_auth_user → public.users)
+--   • 3 named seed users  (tochi / ama / scout1)
+--   • 22 lightweight fan users (fan01–fan22, trust 1.0)
 --   • 2 genres, 2 cities
 --   • 10 artists + 10 tracks
---   • Synthetic engagement events (varied timestamps) so recompute_pulse()
---     has something to work with
---   • One artist ("Dré") gets enough trust-weighted votes to cross Ignition
+--   • Engagement events with deliberate timestamps
+--
+-- Ignition outcome (after recompute_pulse()):
+--   • Dré "No Pressure"  → IGNITED  (25 distinct backers / 76.5 weight)
+--   • All other artists  → pre-ignition (≤3 backers each, never reach 20)
+--
+-- Fan-card demo:
+--   fan01 (@fan01) → supporter #1, ~8 weeks early
+--   fan02 (@fan02) → supporter #2, ~7.4 weeks early
+--   fan03 (@fan03) → supporter #3, ~7 weeks early
+--   fan04 (@fan04) → supporter #4, ~6.4 weeks early
 -- =============================================================================
-
--- ─── Seed UUIDs (fixed so the seed is deterministic) ─────────────────────────
--- Users
--- seed-user-1: 'a0000000-0000-0000-0000-000000000001'
--- seed-user-2: 'a0000000-0000-0000-0000-000000000002'
--- seed-user-3: 'a0000000-0000-0000-0000-000000000003'
 
 -- ─── Step 0: Ensure pgcrypto is available ────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- ─── Step 1: Auth users ───────────────────────────────────────────────────────
--- Inserted directly into auth.users via service-role access (SQL Editor only).
--- This triggers handle_new_auth_user() which creates public.users rows.
+-- =============================================================================
+-- Step 1a: Named seed users (auth.users)
+-- =============================================================================
 INSERT INTO auth.users (
   id, instance_id, aud, role,
   email, encrypted_password, email_confirmed_at,
@@ -64,7 +66,7 @@ VALUES
   )
 ON CONFLICT (id) DO NOTHING;
 
--- Patch public.users rows to be non-anonymous (trigger may have fired before email confirm)
+-- Patch public.users (trigger may have fired before email confirm)
 UPDATE public.users SET is_anonymous = false, taste_trust = 1.0
 WHERE id IN (
   'a0000000-0000-0000-0000-000000000001',
@@ -72,16 +74,54 @@ WHERE id IN (
   'a0000000-0000-0000-0000-000000000003'
 );
 
--- Set handles
 UPDATE public.users SET handle = 'tochi'  WHERE id = 'a0000000-0000-0000-0000-000000000001';
 UPDATE public.users SET handle = 'ama'    WHERE id = 'a0000000-0000-0000-0000-000000000002';
 UPDATE public.users SET handle = 'scout1' WHERE id = 'a0000000-0000-0000-0000-000000000003';
 
--- Give the scout a higher trust score (simulates earned reputation)
+-- Scout has earned reputation
 UPDATE public.users SET taste_trust = 1.5
 WHERE id = 'a0000000-0000-0000-0000-000000000003';
 
--- ─── Step 2: Genres ───────────────────────────────────────────────────────────
+-- =============================================================================
+-- Step 1b: 22 fan users (fan01–fan22, IDs a0000000-…-000000000004 … 000000000025)
+-- These users only vote on Dré to push him across the ignition bars.
+-- =============================================================================
+INSERT INTO auth.users (
+  id, instance_id, aud, role,
+  email, encrypted_password, email_confirmed_at,
+  is_anonymous, created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data,
+  confirmation_token, recovery_token, email_change_token_new, email_change
+)
+SELECT
+  ('a0000000-0000-0000-0000-' || LPAD(n::text, 12, '0'))::UUID,
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated',
+  'fan' || LPAD((n - 3)::text, 2, '0') || '@streets.dev',
+  crypt('Streets2025!', gen_salt('bf')),
+  NOW(), false, NOW(), NOW(),
+  '{"provider":"email","providers":["email"]}', '{}',
+  '', '', '', ''
+FROM generate_series(4, 25) AS n
+ON CONFLICT (id) DO NOTHING;
+
+-- Patch public.users for all fan users
+UPDATE public.users
+SET is_anonymous = false, taste_trust = 1.0
+WHERE id IN (
+  SELECT ('a0000000-0000-0000-0000-' || LPAD(n::text, 12, '0'))::UUID
+  FROM generate_series(4, 25) AS n
+);
+
+-- Set handles: fan01 … fan22
+UPDATE public.users
+SET handle = 'fan' || LPAD((n - 3)::text, 2, '0')
+FROM generate_series(4, 25) AS n
+WHERE id = ('a0000000-0000-0000-0000-' || LPAD(n::text, 12, '0'))::UUID;
+
+-- =============================================================================
+-- Step 2: Genres
+-- =============================================================================
 INSERT INTO genres (id, name, slug) VALUES
   ('b0000000-0000-0000-0000-000000000001', 'Afrobeats',  'afrobeats'),
   ('b0000000-0000-0000-0000-000000000002', 'Alté',       'alte'),
@@ -89,16 +129,20 @@ INSERT INTO genres (id, name, slug) VALUES
   ('b0000000-0000-0000-0000-000000000004', 'Street-Pop', 'street-pop')
 ON CONFLICT (id) DO NOTHING;
 
--- ─── Step 3: Cities ───────────────────────────────────────────────────────────
+-- =============================================================================
+-- Step 3: Cities
+-- =============================================================================
 INSERT INTO cities (id, name, slug, country) VALUES
   ('c0000000-0000-0000-0000-000000000001', 'Port Harcourt', 'port-harcourt', 'NG'),
   ('c0000000-0000-0000-0000-000000000002', 'Lagos',         'lagos',         'NG'),
   ('c0000000-0000-0000-0000-000000000003', 'Abuja',         'abuja',         'NG')
 ON CONFLICT (slug) DO NOTHING;
 
--- ─── Step 4: Artists (10) ────────────────────────────────────────────────────
+-- =============================================================================
+-- Step 4: Artists (10)
+-- =============================================================================
 INSERT INTO artists (id, slug, name, city_id, created_at) VALUES
-  -- PH underground (will ignite via seed votes below)
+  -- PH underground — Dré will ignite
   ('d0000000-0000-0000-0000-000000000001', 'dre-ph',      'Dré',        'c0000000-0000-0000-0000-000000000001', NOW() - INTERVAL '30 days'),
   ('d0000000-0000-0000-0000-000000000002', 'zola-ph',     'Zola',       'c0000000-0000-0000-0000-000000000001', NOW() - INTERVAL '25 days'),
   ('d0000000-0000-0000-0000-000000000003', 'mo-vibez',    'Mo Vibez',   'c0000000-0000-0000-0000-000000000001', NOW() - INTERVAL '20 days'),
@@ -109,12 +153,14 @@ INSERT INTO artists (id, slug, name, city_id, created_at) VALUES
   -- Abuja
   ('d0000000-0000-0000-0000-000000000007', 'abj-gold',    'ABJ Gold',   'c0000000-0000-0000-0000-000000000003', NOW() - INTERVAL '8 days'),
   ('d0000000-0000-0000-0000-000000000008', 'seer-abj',    'Seer',       'c0000000-0000-0000-0000-000000000003', NOW() - INTERVAL '6 days'),
-  -- Fresh drops (< 72h — will appear in 'fresh' bucket)
+  -- Fresh drops (< 72h — appear in 'fresh' bucket)
   ('d0000000-0000-0000-0000-000000000009', 'nova-ph',     'Nova',       'c0000000-0000-0000-0000-000000000001', NOW() - INTERVAL '40 hours'),
   ('d0000000-0000-0000-0000-000000000010', 'rue-lagos',   'Rue',        'c0000000-0000-0000-0000-000000000002', NOW() - INTERVAL '20 hours')
 ON CONFLICT (id) DO NOTHING;
 
--- ─── Step 5: Tracks (one per artist) ─────────────────────────────────────────
+-- =============================================================================
+-- Step 5: Tracks (one per artist)
+-- =============================================================================
 INSERT INTO tracks (id, artist_id, title, genre_id, city_id, ext_url, ext_platform, cover_url, pitch, created_at)
 VALUES
   ('e0000000-0000-0000-0000-000000000001',
@@ -197,7 +243,7 @@ VALUES
    'They will understand it later.',
    NOW() - INTERVAL '6 days'),
 
-  -- Fresh tracks (< 72h) — appear in 'fresh' bucket immediately
+  -- Fresh tracks (< 72h) — appear in 'fresh' bucket
   ('e0000000-0000-0000-0000-000000000009',
    'd0000000-0000-0000-0000-000000000009',
    'First Light', 'b0000000-0000-0000-0000-000000000003',
@@ -219,99 +265,231 @@ VALUES
    NOW() - INTERVAL '20 hours')
 ON CONFLICT (id) DO NOTHING;
 
--- ─── Step 6: Synthetic engagement events ─────────────────────────────────────
--- Weights are pre-computed (base_weight × taste_trust) as they would be at
--- write time. Trust: tochi=1.0, ama=1.0, scout1=1.5
+-- =============================================================================
+-- Step 6: Engagement events
+-- =============================================================================
+-- Idempotent: purge all seed-user events on seed tracks, reset ignition state.
 --
--- Dré (d...001 / e...001) gets the most engagement → should rank #1 + ignite.
--- Zola, Mo, Echo get medium engagement → rank 2–4.
--- The rest get light engagement.
--- Nova + Rue get only a couple of reactions (fresh, no votes yet).
+-- ── Dré "No Pressure" — designed to IGNITE ───────────────────────────────────
+-- Backers: 25 distinct users (fans 01–22 + tochi + ama + scout1)
+-- Vote weight: 22×3.0 + 3.0 + 3.0 + 4.5 = 76.5  (bars: ≥40 weight, ≥20 backers ✓)
+--
+-- Timeline design (drives weeks_early on the fan card):
+--   fans 01–04  voted 45–56 days ago → weeks_early 6.4–8.0  ← the "I called it" crew
+--   fans 05–09  voted 18–28 days ago → weeks_early 2.6–4.0
+--   fans 10–22  voted  1–7  days ago → weeks_early 0.1–1.0  ← the "pile-on" wave
+--   tochi/ama/scout1 voted 1–5 days ago (same wave)
+--
+-- recompute_pulse() sets ignited_at = NOW() when it runs, then writes the
+-- supporter_ledger with supporter_rank (1=earliest) and weeks_early per backer.
+-- ── All other artists: ≤3 backers — never approach the 20-backer bar ─────────
 
+-- 6a. Purge old seed events (scoped to seed user IDs 001–025 × seed track IDs)
+DELETE FROM engagement_events
+WHERE user_id IN (
+  SELECT ('a0000000-0000-0000-0000-' || LPAD(n::text, 12, '0'))::UUID
+  FROM generate_series(1, 25) AS n
+)
+AND track_id IN (
+  'e0000000-0000-0000-0000-000000000001',
+  'e0000000-0000-0000-0000-000000000002',
+  'e0000000-0000-0000-0000-000000000003',
+  'e0000000-0000-0000-0000-000000000004',
+  'e0000000-0000-0000-0000-000000000005',
+  'e0000000-0000-0000-0000-000000000006',
+  'e0000000-0000-0000-0000-000000000007',
+  'e0000000-0000-0000-0000-000000000008',
+  'e0000000-0000-0000-0000-000000000009',
+  'e0000000-0000-0000-0000-000000000010'
+);
+
+-- 6b. Reset any ignitions and ledger entries from a previous run
+UPDATE artists SET ignited_at = NULL
+WHERE id IN (
+  'd0000000-0000-0000-0000-000000000001',
+  'd0000000-0000-0000-0000-000000000002',
+  'd0000000-0000-0000-0000-000000000003',
+  'd0000000-0000-0000-0000-000000000004',
+  'd0000000-0000-0000-0000-000000000005',
+  'd0000000-0000-0000-0000-000000000006',
+  'd0000000-0000-0000-0000-000000000007',
+  'd0000000-0000-0000-0000-000000000008',
+  'd0000000-0000-0000-0000-000000000009',
+  'd0000000-0000-0000-0000-000000000010'
+);
+
+DELETE FROM supporter_ledger
+WHERE artist_id IN (
+  'd0000000-0000-0000-0000-000000000001',
+  'd0000000-0000-0000-0000-000000000002',
+  'd0000000-0000-0000-0000-000000000003',
+  'd0000000-0000-0000-0000-000000000004',
+  'd0000000-0000-0000-0000-000000000005',
+  'd0000000-0000-0000-0000-000000000006',
+  'd0000000-0000-0000-0000-000000000007',
+  'd0000000-0000-0000-0000-000000000008',
+  'd0000000-0000-0000-0000-000000000009',
+  'd0000000-0000-0000-0000-000000000010'
+);
+
+-- 6c. Insert engagement events
 INSERT INTO engagement_events (user_id, track_id, kind, weight, created_at)
 VALUES
 
-  -- ── Dré "No Pressure" — heavy engagement over past 3 weeks ─────────────────
-  -- Votes (weight = 3 × trust)
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000001', 'vote',  3.0,  NOW() - INTERVAL '28 days'),
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', 'vote',  3.0,  NOW() - INTERVAL '20 days'),
-  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000001', 'vote',  4.5,  NOW() - INTERVAL '14 days'),
-  -- Reactions (weight = 1 × trust)
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000001', 'react', 1.0,  NOW() - INTERVAL '27 days'),
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', 'react', 1.0,  NOW() - INTERVAL '19 days'),
-  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000001', 'react', 1.5,  NOW() - INTERVAL '13 days'),
-  -- Shares (weight = 4 × trust) — recent, so they contribute heavily to hottest
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000001', 'share', 4.0,  NOW() - INTERVAL '5 days'),
-  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000001', 'share', 6.0,  NOW() - INTERVAL '2 days'),
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', 'share', 4.0,  NOW() - INTERVAL '6 hours'),
+  -- ════════════════════════════════════════════════════════════════════════════
+  -- DRÉ "No Pressure" (e...001)
+  -- ════════════════════════════════════════════════════════════════════════════
 
-  -- ── Zola "Cold Season" — strong engagement ───────────────────────────────
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000002', 'vote',  3.0,  NOW() - INTERVAL '23 days'),
-  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000002', 'vote',  4.5,  NOW() - INTERVAL '10 days'),
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000002', 'react', 1.0,  NOW() - INTERVAL '22 days'),
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000002', 'share', 4.0,  NOW() - INTERVAL '4 days'),
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000002', 'share', 4.0,  NOW() - INTERVAL '1 day'),
+  -- ── Early believers — voted 6–8 weeks ago (these produce meaningful weeks_early)
+  -- fan01 → supporter #1,  ~8.0 weeks early
+  ('a0000000-0000-0000-0000-000000000004', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '56 days'),
+  -- fan02 → supporter #2,  ~7.4 weeks early
+  ('a0000000-0000-0000-0000-000000000005', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '52 days'),
+  -- fan03 → supporter #3,  ~7.0 weeks early
+  ('a0000000-0000-0000-0000-000000000006', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '49 days'),
+  -- fan04 → supporter #4,  ~6.4 weeks early
+  ('a0000000-0000-0000-0000-000000000007', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '45 days'),
 
-  -- ── Mo Vibez "Overtime" ───────────────────────────────────────────────────
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000003', 'vote',  3.0,  NOW() - INTERVAL '18 days'),
-  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000003', 'vote',  4.5,  NOW() - INTERVAL '7 days'),
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000003', 'react', 1.0,  NOW() - INTERVAL '17 days'),
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000003', 'share', 4.0,  NOW() - INTERVAL '3 days'),
+  -- ── Mid adopters — voted 3–4 weeks ago
+  -- fan05 → supporter #5,  ~4.0 weeks early
+  ('a0000000-0000-0000-0000-000000000008', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '28 days'),
+  -- fan06 → supporter #6,  ~3.4 weeks early
+  ('a0000000-0000-0000-0000-000000000009', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '24 days'),
+  -- fan07 → supporter #7,  ~3.0 weeks early
+  ('a0000000-0000-0000-0000-000000000010', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '21 days'),
+  -- fan08 → supporter #8,  ~2.6 weeks early
+  ('a0000000-0000-0000-0000-000000000011', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '18 days'),
+  -- fan09 → supporter #9,  ~2.0 weeks early
+  ('a0000000-0000-0000-0000-000000000012', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '14 days'),
 
-  -- ── Echo "Echo Chamber" ───────────────────────────────────────────────────
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000004', 'vote',  3.0,  NOW() - INTERVAL '13 days'),
-  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000004', 'vote',  4.5,  NOW() - INTERVAL '5 days'),
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000004', 'react', 1.0,  NOW() - INTERVAL '12 days'),
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000004', 'share', 4.0,  NOW() - INTERVAL '2 days'),
+  -- ── Pile-on wave — voted in the last 7 days (pushing over both bars)
+  -- fan10 → supporter #10, ~1.0 week early
+  ('a0000000-0000-0000-0000-000000000013', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '7 days'),
+  -- fan11 → supporter #11, ~0.9 weeks early
+  ('a0000000-0000-0000-0000-000000000014', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '6 days'),
+  -- fan12 → supporter #12
+  ('a0000000-0000-0000-0000-000000000015', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '5 days 18 hours'),
+  -- fan13 → supporter #13
+  ('a0000000-0000-0000-0000-000000000016', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '5 days 6 hours'),
+  -- fan14 → supporter #14
+  ('a0000000-0000-0000-0000-000000000017', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '4 days 20 hours'),
+  -- fan15 → supporter #15
+  ('a0000000-0000-0000-0000-000000000018', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '4 days 8 hours'),
+  -- fan16 → supporter #16
+  ('a0000000-0000-0000-0000-000000000019', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '3 days 18 hours'),
+  -- fan17 → supporter #17
+  ('a0000000-0000-0000-0000-000000000020', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '3 days 6 hours'),
+  -- fan18 → supporter #18
+  ('a0000000-0000-0000-0000-000000000021', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '2 days 16 hours'),
+  -- fan19 → supporter #19
+  ('a0000000-0000-0000-0000-000000000022', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '2 days 4 hours'),
+  -- fan20 → supporter #20
+  ('a0000000-0000-0000-0000-000000000023', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '1 day 20 hours'),
+  -- fan21 → supporter #21
+  ('a0000000-0000-0000-0000-000000000024', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '1 day 6 hours'),
+  -- fan22 → supporter #22
+  ('a0000000-0000-0000-0000-000000000025', 'e0000000-0000-0000-0000-000000000001', 'vote', 3.0, NOW() - INTERVAL '18 hours'),
 
-  -- ── K-Dark, Temi Waves, ABJ Gold — light engagement ─────────────────────
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000005', 'vote',  3.0,  NOW() - INTERVAL '10 days'),
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000005', 'react', 1.0,  NOW() - INTERVAL '9 days'),
+  -- ── tochi / ama / scout1 — also voted recently (supporters #23–25)
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000001', 'vote',  3.0, NOW() - INTERVAL '5 days'),
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', 'vote',  3.0, NOW() - INTERVAL '3 days'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000001', 'vote',  4.5, NOW() - INTERVAL '1 day'),
 
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000006', 'vote',  3.0,  NOW() - INTERVAL '9 days'),
-  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000006', 'react', 1.5,  NOW() - INTERVAL '8 days'),
+  -- ── Reactions + shares on Dré (visible fire count + pulse boost)
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000001', 'react', 1.0, NOW() - INTERVAL '5 days'),
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', 'react', 1.0, NOW() - INTERVAL '2 days'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000001', 'react', 1.5, NOW() - INTERVAL '10 hours'),
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000001', 'share', 4.0, NOW() - INTERVAL '4 days'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000001', 'share', 6.0, NOW() - INTERVAL '2 days'),
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', 'share', 4.0, NOW() - INTERVAL '8 hours'),
 
-  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000007', 'vote',  4.5,  NOW() - INTERVAL '6 days'),
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000007', 'react', 1.0,  NOW() - INTERVAL '5 days'),
+  -- ════════════════════════════════════════════════════════════════════════════
+  -- REMAINING ARTISTS — pre-ignition (≤3 distinct backers each)
+  -- None come close to the 20-backer bar. All shown as rising/flat on feed.
+  -- ════════════════════════════════════════════════════════════════════════════
 
-  -- ── Seer "Vision" — light ────────────────────────────────────────────────
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000008', 'vote',  3.0,  NOW() - INTERVAL '5 days'),
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000008', 'react', 1.0,  NOW() - INTERVAL '4 days'),
+  -- ── Zola "Cold Season" — rising (2 votes + 2 shares + 2 reacts)
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000002', 'vote',  3.0, NOW() - INTERVAL '4 days'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000002', 'vote',  4.5, NOW() - INTERVAL '18 hours'),
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000002', 'share', 4.0, NOW() - INTERVAL '3 days'),
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000002', 'share', 4.0, NOW() - INTERVAL '12 hours'),
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000002', 'react', 1.0, NOW() - INTERVAL '4 days'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000002', 'react', 1.5, NOW() - INTERVAL '6 hours'),
 
-  -- ── Nova + Rue — fresh drops, reactions only so far ──────────────────────
-  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000009', 'react', 1.0,  NOW() - INTERVAL '35 hours'),
-  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000009', 'react', 1.0,  NOW() - INTERVAL '30 hours'),
+  -- ── Mo Vibez "Overtime" — some momentum (2 votes + 1 share + 2 reacts)
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000003', 'vote',  3.0, NOW() - INTERVAL '4 days'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000003', 'vote',  4.5, NOW() - INTERVAL '2 days'),
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000003', 'share', 4.0, NOW() - INTERVAL '1 day'),
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000003', 'react', 1.0, NOW() - INTERVAL '3 days'),
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000003', 'react', 1.0, NOW() - INTERVAL '20 hours'),
 
-  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000010', 'react', 1.5,  NOW() - INTERVAL '18 hours')
+  -- ── Echo "Echo Chamber" — slight uptick (1 vote + 1 share + 2 reacts)
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000004', 'vote',  3.0, NOW() - INTERVAL '3 days'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000004', 'share', 6.0, NOW() - INTERVAL '2 days'),
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000004', 'react', 1.0, NOW() - INTERVAL '3 days'),
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000004', 'react', 1.0, NOW() - INTERVAL '28 hours'),
+
+  -- ── K-Dark "Dark Hours" — minimal (1 vote + 1 react, older → shows —)
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000005', 'vote',  3.0, NOW() - INTERVAL '5 days'),
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000005', 'react', 1.0, NOW() - INTERVAL '4 days'),
+
+  -- ── Temi Waves "Wavelength" — minimal (1 vote + 1 react, older)
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000006', 'vote',  3.0, NOW() - INTERVAL '5 days'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000006', 'react', 1.5, NOW() - INTERVAL '4 days'),
+
+  -- ── ABJ Gold "Gold Standard" — barely any (1 react only)
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000007', 'react', 1.0, NOW() - INTERVAL '3 days'),
+
+  -- ── Seer "Vision" — barely any (1 react only)
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000008', 'react', 1.0, NOW() - INTERVAL '2 days'),
+
+  -- ── Nova "First Light" — fresh drop, cold-start bonus active (3 reacts)
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000009', 'react', 1.0, NOW() - INTERVAL '35 hours'),
+  ('a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000009', 'react', 1.0, NOW() - INTERVAL '30 hours'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000009', 'react', 1.5, NOW() - INTERVAL '20 hours'),
+
+  -- ── Rue "Rue the Day" — freshest drop (2 reacts)
+  ('a0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000010', 'react', 1.0, NOW() - INTERVAL '18 hours'),
+  ('a0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000010', 'react', 1.5, NOW() - INTERVAL '10 hours')
 
 ON CONFLICT DO NOTHING;
 
 -- =============================================================================
--- VERIFICATION QUERIES
--- Run these manually to confirm the seed is healthy
+-- VERIFICATION QUERIES — run these manually after seed + recompute_pulse()
 -- =============================================================================
 
--- 1. Check user rows
+-- 1. Confirm user rows
 -- SELECT id, handle, is_anonymous, taste_trust FROM users ORDER BY handle;
 
--- 2. Check tracks + artists
--- SELECT a.name, t.title, t.created_at FROM tracks t JOIN artists a ON a.id = t.artist_id ORDER BY t.created_at;
-
--- 3. Check engagement totals per artist
--- SELECT a.name, COUNT(*) AS events, SUM(ee.weight) AS total_weight
+-- 2. Engagement totals per artist (Dré should be far ahead)
+-- SELECT a.name,
+--        COUNT(DISTINCT ee.user_id) FILTER (WHERE ee.kind='vote') AS distinct_backers,
+--        COALESCE(SUM(ee.weight) FILTER (WHERE ee.kind='vote'), 0) AS vote_weight
 -- FROM engagement_events ee
 -- JOIN tracks t ON t.id = ee.track_id
 -- JOIN artists a ON a.id = t.artist_id
--- GROUP BY a.name ORDER BY total_weight DESC;
+-- GROUP BY a.name ORDER BY vote_weight DESC;
 
--- 4. Run pulse recompute and check rankings
+-- 3. Fire recompute, then check rankings
 -- SELECT public.recompute_pulse();
--- SELECT r.rank, t.title, a.name, ROUND(r.pulse::numeric, 2) AS pulse, ROUND(r.momentum::numeric, 3) AS momentum
--- FROM rankings r JOIN tracks t ON t.id = r.track_id JOIN artists a ON a.id = t.artist_id
--- WHERE r.bucket = 'nigeria' ORDER BY r.rank;
+-- SELECT r.rank, t.title, a.name, a.ignited_at IS NOT NULL AS ignited,
+--        ROUND(r.pulse::numeric,2) AS pulse, ROUND(r.momentum::numeric,3) AS momentum
+-- FROM rankings r JOIN tracks t ON t.id=r.track_id JOIN artists a ON a.id=t.artist_id
+-- WHERE r.bucket='nigeria' ORDER BY r.rank;
 
--- 5. Check ignition + ledger
+-- 4. Confirm exactly ONE ignition
 -- SELECT name, ignited_at FROM artists WHERE ignited_at IS NOT NULL;
--- SELECT u.handle, a.name, sl.supporter_rank, sl.weeks_early
--- FROM supporter_ledger sl JOIN users u ON u.id = sl.user_id JOIN artists a ON a.id = sl.artist_id
--- ORDER BY a.name, sl.supporter_rank;
+
+-- 5. Inspect the supporter ledger (fan01 should be #1, ~8 weeks early)
+-- SELECT u.handle, sl.supporter_rank, sl.weeks_early
+-- FROM supporter_ledger sl
+-- JOIN users u ON u.id = sl.user_id
+-- JOIN artists a ON a.id = sl.artist_id
+-- WHERE a.slug = 'dre-ph'
+-- ORDER BY sl.supporter_rank;
+
+-- 6. Get a fan-card URL for the top early backer (fan01)
+-- SELECT '/api/card/fan/' || sl.id AS fan_card_url
+-- FROM supporter_ledger sl
+-- JOIN users u ON u.id = sl.user_id
+-- WHERE u.handle = 'fan01';
