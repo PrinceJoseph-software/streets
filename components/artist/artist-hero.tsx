@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import { CoverImage } from '@/components/ui/cover-image'
 import { VoteButton } from './vote-button'
 
 // ─── types ─────────────────────────────────────────────────────────────────────
@@ -113,18 +113,13 @@ export function ArtistHero({
           disabled={!topTrack}
           className="relative flex-shrink-0 w-24 h-24 bg-ink overflow-hidden group disabled:cursor-default"
         >
-          {topTrack ? (
-            <Image
-              src={topTrack.coverUrl || 'https://placehold.co/96x96/0a0a0a/f4f1ea?text=?'}
-              alt={`${artist.name} cover`}
-              width={96}
-              height={96}
-              className="object-cover w-full h-full"
-              priority
-            />
-          ) : (
-            <div className="w-full h-full bg-ink" />
-          )}
+          <CoverImage
+            coverUrl={topTrack?.coverUrl}
+            artistName={artist.name}
+            width={96}
+            height={96}
+            priority
+          />
           {/* Play overlay */}
           {topTrack && (
             <div className="absolute inset-0 bg-ink bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center">

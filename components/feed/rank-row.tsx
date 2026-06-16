@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import { CoverImage } from '@/components/ui/cover-image'
 import { useReactions } from './reaction-provider'
 
 // ─── types ─────────────────────────────────────────────────────────────────────
@@ -125,12 +125,11 @@ export function RankRow({ item, showCity = false }: Props) {
           aria-label={playing ? 'Collapse player' : `Play ${t.title}`}
           className="relative flex-shrink-0 w-12 h-12 bg-ink overflow-hidden group"
         >
-          <Image
-            src={t.cover_url || 'https://placehold.co/48x48/0a0a0a/f4f1ea?text=?'}
-            alt={`${t.title} cover`}
+          <CoverImage
+            coverUrl={t.cover_url}
+            artistName={t.artists.name}
             width={48}
             height={48}
-            className="object-cover w-full h-full"
           />
           {/* Play overlay */}
           <div className="absolute inset-0 flex items-center justify-center bg-ink bg-opacity-0 group-hover:bg-opacity-50 transition-all">

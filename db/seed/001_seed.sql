@@ -169,7 +169,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000001',
    'https://audiomack.com/dre-ph/song/no-pressure',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/FFE000?text=DRE',
+   '',
    'PH to the world. This one hits different at 2am.',
    NOW() - INTERVAL '30 days'),
 
@@ -179,7 +179,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000001',
    'https://audiomack.com/zola-ph/song/cold-season',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/F4F1EA?text=ZOLA',
+   '',
    'Streets know Zola been cooking.',
    NOW() - INTERVAL '25 days'),
 
@@ -189,7 +189,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000001',
    'https://audiomack.com/mo-vibez/song/overtime',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/F4F1EA?text=MO',
+   '',
    NULL,
    NOW() - INTERVAL '20 days'),
 
@@ -199,7 +199,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000002',
    'https://audiomack.com/echo-lagos/song/echo-chamber',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/F4F1EA?text=ECHO',
+   '',
    'Alté rising out of Yaba.',
    NOW() - INTERVAL '15 days'),
 
@@ -209,7 +209,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000002',
    'https://audiomack.com/k-dark/song/dark-hours',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/F4F1EA?text=KDARK',
+   '',
    NULL,
    NOW() - INTERVAL '12 days'),
 
@@ -219,7 +219,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000002',
    'https://audiomack.com/temi-waves/song/wavelength',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/F4F1EA?text=TEMI',
+   '',
    'Temi does not miss.',
    NOW() - INTERVAL '10 days'),
 
@@ -229,7 +229,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000003',
    'https://audiomack.com/abj-gold/song/gold-standard',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/F4F1EA?text=GOLD',
+   '',
    NULL,
    NOW() - INTERVAL '8 days'),
 
@@ -239,7 +239,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000003',
    'https://audiomack.com/seer-abj/song/vision',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/F4F1EA?text=SEER',
+   '',
    'They will understand it later.',
    NOW() - INTERVAL '6 days'),
 
@@ -250,7 +250,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000001',
    'https://audiomack.com/nova-ph/song/first-light',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/F4F1EA?text=NOVA',
+   '',
    'Nova just dropped. You heard it here.',
    NOW() - INTERVAL '40 hours'),
 
@@ -260,7 +260,7 @@ VALUES
    'c0000000-0000-0000-0000-000000000002',
    'https://audiomack.com/rue-lagos/song/rue-the-day',
    'audiomack',
-   'https://placehold.co/400x400/0A0A0A/F4F1EA?text=RUE',
+   '',
    NULL,
    NOW() - INTERVAL '20 hours')
 ON CONFLICT (id) DO NOTHING;
